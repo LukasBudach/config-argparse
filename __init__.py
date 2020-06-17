@@ -1,1 +1,1 @@
-from src.PersistentArgumentParser import PersistentArgumentParser
+__all__=['PersistentArgumentParser']
