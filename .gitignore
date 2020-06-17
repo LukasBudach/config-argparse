@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# IDE config directories
+.idea/
+
+# configs directory
+configs/
