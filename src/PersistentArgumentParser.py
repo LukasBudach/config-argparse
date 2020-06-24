@@ -5,9 +5,20 @@ import yaml
 from pathlib import Path
 
 
+class _PersistentMutuallyExclusiveGroup(argparse._MutuallyExclusiveGroup):
+    def __init__(self, container, required=False):
+        super(_PersistentMutuallyExclusiveGroup, self).__init__(container, required=required)
+
+    def _add_action(self, action):
+        action = super(_PersistentMutuallyExclusiveGroup, self)._add_action(action)
+        self._container._register_mutex_group_action(self, action)
+        return action
+
+
 class PersistentArgumentParser(argparse.ArgumentParser):
     def __init__(self, **kwargs):
         self._argument_required = {}
+        self._mutex_required_dict = {}
         self._parsed_args = None
         super(PersistentArgumentParser, self).__init__(**kwargs)
         self.add_argument('-c', '--config', type=str, help='Path to the configuration file to read.')
@@ -20,8 +31,24 @@ class PersistentArgumentParser(argparse.ArgumentParser):
         added_action = super(PersistentArgumentParser, self).add_argument(*name_or_flags, **kwargs)
         self._argument_required[added_action.dest] = require_arg
 
-    def parse_args(self, **kwargs):
-        self._parsed_args = super(PersistentArgumentParser, self).parse_args(**kwargs)
+    def add_mutually_exclusive_group(self, **kwargs):
+        require_group = False
+        if 'required' in kwargs:
+            require_group = kwargs['required']
+            kwargs['required'] = False
+
+        group = _PersistentMutuallyExclusiveGroup(self, **kwargs)
+        self._mutually_exclusive_groups.append(group)
+        self._mutex_required_dict[len(self._mutually_exclusive_groups) - 1] = [require_group]
+        return group
+
+    def _register_mutex_group_action(self, group, action):
+        g_id = self._mutually_exclusive_groups.index(group)
+        self._mutex_required_dict[g_id].append(action.dest)
+        self._argument_required[action.dest] = g_id
+
+    def _parse_known_args(self, arg_strings, namespace):
+        self._parsed_args, args = super(PersistentArgumentParser, self)._parse_known_args(arg_strings, namespace)
 
         update_config = True
         if self._parsed_args.config is not None:
@@ -29,17 +56,16 @@ class PersistentArgumentParser(argparse.ArgumentParser):
             self._parsed_args.config = Path(self._parsed_args.config)
             update_config = self._supplement_from_config(self._parsed_args.config)
         else:
-            print('As there was no config file provided, the commandline arguments will be exported to a new one.')
+            print('As there was no config file provided, the command line arguments will be exported to a new one if '
+                  'they are valid.')
 
-        miss_required = self._validate_config()
-        if miss_required:
-            self.error('The configuration was invalid, the following required arguments were not set: {}'
-                       .format(miss_required))
+        self._validate_config()
 
         if update_config or self._parsed_args.config is None:
             self._update_config_path_to_temporary()
             self._save_config()
-        return self._parsed_args
+
+        return self._parsed_args, args
 
     def parsed_args_to_dict(self):
         arg_dict = {}
@@ -88,26 +114,48 @@ class PersistentArgumentParser(argparse.ArgumentParser):
         return require_saving_updated_config
 
     def _validate_config(self):
+        error_msg = ''
         missing_args = []
+        handled_mutex_groups = []
         for arg_name in self._argument_required.keys():
             arg_required = self._argument_required[arg_name]
-            if arg_required and (getattr(self._parsed_args, arg_name) is None):
-                missing_args.append(arg_name)
-        return missing_args
+            if type(arg_required) is int:
+                if arg_required not in handled_mutex_groups:
+                    error_msg += self._validate_mutex_group(arg_required)
+                    handled_mutex_groups.append(arg_required)
+                continue
+            missing_args.extend(self._validate_argument(arg_name, arg_required))
+
+        if missing_args:
+            error_msg += '\nThe configuration was invalid, the following required arguments were not set: {}'\
+                .format(missing_args)
+
+        if error_msg != '':
+            self.error(error_msg)
+
+    def _validate_argument(self, arg_name, is_required):
+        if is_required and (getattr(self._parsed_args, arg_name) is None):
+            return [arg_name]
+        return []
+
+    def _validate_mutex_group(self, g_id):
+        is_required = self._mutex_required_dict[g_id][0]
+        if not is_required:
+            return ''
+        arg_names = self._mutex_required_dict[g_id][1:]
+        any_set = False
+        fields_set = []
+        for arg_name in arg_names:
+            if getattr(self._parsed_args, arg_name) is not None:
+                any_set = True
+                fields_set.append(arg_name)
+        if not any_set:
+            return '\nOne of the following fields must be set: {}'.format(', '.join(arg_names))
+        elif len(fields_set) > 1:
+            return '\nThe following fields are not allowed to be set together: {}'.format(', '.join(fields_set))
+        return ''
 
     def _save_config(self):
         with open(Path(self._parsed_args.config), 'w+') as cf:
             yaml.dump(self.parsed_args_to_dict(), cf)
             print('Saved the updated config file to {}'.format(self._parsed_args.config))
-
-
-if __name__ == '__main__':
-    parser = PersistentArgumentParser(description='Test parser.')
-
-    parser.add_argument('-b', '--batch-size', required=True, type=int, help='Batch size to use for training.')
-    parser.add_argument('-e', '--epochs', required=True, type=int, help='Number of epochs to train for.')
-    parser.add_argument('--num-gpus', required=True, type=int, help='Number of GPUs available to be used during training.')
-    parser.add_argument('--train-data', required=True, type=str, help='Path to or autogluon handler for train dataset.')
-    parser.add_argument('--val-data', required=False, type=str, help='Path to or autogluon handler for validation dataset.')
-
-    args = parser.parse_args()
