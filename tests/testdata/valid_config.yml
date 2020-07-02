@@ -1,0 +1,5 @@
+config: tests\testdata\valid_config.yml
+test_arg_four: some
+test_arg_one: null
+test_arg_three: null
+test_arg_two: val

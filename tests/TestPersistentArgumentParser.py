@@ -126,6 +126,23 @@ class TestPersistentArgumentParser(unittest.TestCase):
             self.parser.parse_args(args=self.arg_input)
         self.assertEqual(2, e.exception.code)
 
+    def testConfigOnlyParsing(self):
+        test_args = {
+            'test-arg-one': [True, 0, None],
+            'test-arg-two': [True, 1, 'val'],
+            'test-arg-three': [True, 1, None],
+            'test-arg-four': [True, 0, 'some']
+        }
+        self._construct_parser(test_args)
+        for arg_name in test_args:
+            # add argument to reference namespace
+            setattr(self.ref_result, arg_name.replace('-', '_'), test_args[arg_name][2])
+        self.arg_input = ['--config', 'tests/testdata/valid_config.yml']
+        res = self.parser.parse_args(self.arg_input)
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
 
 if __name__ == '__main__':
     unittest.main()
