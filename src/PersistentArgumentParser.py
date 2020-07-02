@@ -17,6 +17,7 @@ class _PersistentMutuallyExclusiveGroup(argparse._MutuallyExclusiveGroup):
 
 class PersistentArgumentParser(argparse.ArgumentParser):
     def __init__(self, **kwargs):
+        self._arg_dest_object_map = {}
         self._argument_required = {}
         self._mutex_required_dict = {}
         self._parsed_args = None
@@ -30,6 +31,7 @@ class PersistentArgumentParser(argparse.ArgumentParser):
             kwargs['required'] = False
         added_action = super(PersistentArgumentParser, self).add_argument(*name_or_flags, **kwargs)
         self._argument_required[added_action.dest] = require_arg
+        self._arg_dest_object_map[added_action.dest] = added_action
 
     def add_mutually_exclusive_group(self, **kwargs):
         require_group = False
@@ -105,6 +107,10 @@ class PersistentArgumentParser(argparse.ArgumentParser):
                 continue
             cmd_line_val = getattr(self._parsed_args, arg)
             if cmd_line_val is None:
+                setattr(self._parsed_args, arg, conf_data[arg])
+            elif isinstance(self._arg_dest_object_map[arg], argparse._StoreConstAction) \
+                    and (cmd_line_val != self._arg_dest_object_map[arg].const):
+                print('Ping')
                 setattr(self._parsed_args, arg, conf_data[arg])
             else:
                 if conf_data[arg] != cmd_line_val:

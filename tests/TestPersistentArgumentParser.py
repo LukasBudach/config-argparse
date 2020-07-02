@@ -143,6 +143,54 @@ class TestPersistentArgumentParser(unittest.TestCase):
         delattr(res, 'config')
         self.assertEqual(self.ref_result, res)
 
+    def testBoolFlagTrueSet(self):
+        self.parser.add_argument('--test-flag', action='store_true')
+        res = self.parser.parse_args(['--test-flag'])
+        self.ref_result.test_flag = True
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
+    def testBoolFlagTrueNotSet(self):
+        self.parser.add_argument('--test-flag', action='store_true')
+        res = self.parser.parse_args([])
+        self.ref_result.test_flag = False
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
+    def testBoolFlagFalseSet(self):
+        self.parser.add_argument('--test-flag', action='store_false')
+        res = self.parser.parse_args(['--test-flag'])
+        self.ref_result.test_flag = False
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
+    def testBoolFlagFalseNotSet(self):
+        self.parser.add_argument('--test-flag', action='store_false')
+        res = self.parser.parse_args([])
+        self.ref_result.test_flag = True
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
+    def testBoolFlagOverwritesConfigIfSet(self):
+        self.parser.add_argument('--test-flag', action='store_true')
+        res = self.parser.parse_args(['--test-flag', '--config', 'tests/testdata/bool_flag_test_config.yml'])
+        self.ref_result.test_flag = True
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
+    def testBoolFlagOverwrittenByConfigIfNotSet(self):
+        self.parser.add_argument('--test-flag', action='store_false')
+        res = self.parser.parse_args(['--config', 'tests/testdata/bool_flag_test_config.yml'])
+        self.ref_result.test_flag = False
+        self.assertIsNotNone(res.config)
+        delattr(res, 'config')
+        self.assertEqual(self.ref_result, res)
+
 
 if __name__ == '__main__':
     unittest.main()

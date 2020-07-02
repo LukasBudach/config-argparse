@@ -1,0 +1,2 @@
+config: tests\testdata\bool_flag_test_config.yml
+test_flag: False
