@@ -89,7 +89,7 @@ class PersistentArgumentParser(argparse.ArgumentParser):
         conf_data = {}
         # load the config file
         with open(config, 'r') as cf:
-            conf_data = yaml.load(cf)
+            conf_data = yaml.load(cf, Loader=yaml.FullLoader)
         # convert saved config path to path object
         conf_data['config'] = Path(conf_data['config'])
 
