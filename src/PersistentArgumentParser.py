@@ -3,14 +3,32 @@ import datetime
 import yaml
 
 from pathlib import Path
+import persistentargparse
+
+
+class _PersistentGroup(argparse._ArgumentGroup):
+    _container = None
+
+    def __init__(self, container, title=None, description=None, **kwargs):
+        super(_PersistentGroup, self).__init__(
+            container, title, description, **kwargs)
+        self._container = container
+
+    def _add_action(self, action):
+        action = super(_PersistentGroup, self)._add_action(action)
+        self._container._argument_required[action.dest] = action.required
+        self._container._arg_dest_object_map[action.dest] = action
+        return action
 
 
 class _PersistentMutuallyExclusiveGroup(argparse._MutuallyExclusiveGroup):
     def __init__(self, container, required=False):
-        super(_PersistentMutuallyExclusiveGroup, self).__init__(container, required=required)
+        super(_PersistentMutuallyExclusiveGroup, self).__init__(
+            container, required=required)
 
     def _add_action(self, action):
-        action = super(_PersistentMutuallyExclusiveGroup, self)._add_action(action)
+        action = super(_PersistentMutuallyExclusiveGroup,
+                       self)._add_action(action)
         self._container._register_mutex_group_action(self, action)
         return action
 
@@ -22,14 +40,20 @@ class PersistentArgumentParser(argparse.ArgumentParser):
         self._mutex_required_dict = {}
         self._parsed_args = None
         super(PersistentArgumentParser, self).__init__(**kwargs)
-        self.add_argument('-c', '--config', type=str, help='Path to the configuration file to read.')
+        self.add_argument('-c', '--config', type=str,
+                          help='Path to the configuration file to read.')
+
+    def add_argument_group(self, *name_or_flags, **kwargs):
+        group = _PersistentGroup(self, *name_or_flags, **kwargs)
+        return group
 
     def add_argument(self, *name_or_flags, **kwargs):
         require_arg = False
         if 'required' in kwargs:
             require_arg = kwargs['required']
             kwargs['required'] = False
-        added_action = super(PersistentArgumentParser, self).add_argument(*name_or_flags, **kwargs)
+        added_action = super(PersistentArgumentParser, self).add_argument(
+            *name_or_flags, **kwargs)
         self._argument_required[added_action.dest] = require_arg
         self._arg_dest_object_map[added_action.dest] = added_action
 
@@ -41,7 +65,8 @@ class PersistentArgumentParser(argparse.ArgumentParser):
 
         group = _PersistentMutuallyExclusiveGroup(self, **kwargs)
         self._mutually_exclusive_groups.append(group)
-        self._mutex_required_dict[len(self._mutually_exclusive_groups) - 1] = [require_group]
+        self._mutex_required_dict[len(
+            self._mutually_exclusive_groups) - 1] = [require_group]
         return group
 
     def _register_mutex_group_action(self, group, action):
@@ -50,13 +75,14 @@ class PersistentArgumentParser(argparse.ArgumentParser):
         self._argument_required[action.dest] = g_id
 
     def _parse_known_args(self, arg_strings, namespace):
-        self._parsed_args, args = super(PersistentArgumentParser, self)._parse_known_args(arg_strings, namespace)
-
+        self._parsed_args, args = super(
+            PersistentArgumentParser, self)._parse_known_args(arg_strings, namespace)
         update_config = True
         if self._parsed_args.config is not None:
             # convert path to config file to actual path
             self._parsed_args.config = Path(self._parsed_args.config)
-            update_config = self._supplement_from_config(self._parsed_args.config)
+            update_config = self._supplement_from_config(
+                self._parsed_args.config)
         else:
             print('As there was no config file provided, the command line arguments will be exported to a new one if '
                   'they are valid.')
@@ -81,7 +107,7 @@ class PersistentArgumentParser(argparse.ArgumentParser):
     def _update_config_path_to_temporary(self):
         now = datetime.datetime.now()
         target_path = Path('./configs/autosaved/config_{date}_{time}.yml'.format(date=now.strftime('%Y_%m_%d'),
-                                                                                  time=now.strftime('%H_%M')))
+                                                                                 time=now.strftime('%H_%M')))
         target_path.parent.mkdir(parents=True, exist_ok=True)
         self._parsed_args.config = target_path
 
@@ -101,6 +127,7 @@ class PersistentArgumentParser(argparse.ArgumentParser):
 
         # for each value in the config, set it in the Namespace if no value was set beforehand
         # remember whether all config values were used or not - if not, the config must be written again
+
         for arg in conf_data.keys():
             if arg not in vars(self._parsed_args):
                 require_saving_updated_config = True
@@ -108,15 +135,15 @@ class PersistentArgumentParser(argparse.ArgumentParser):
             cmd_line_val = getattr(self._parsed_args, arg)
             if cmd_line_val is None:
                 setattr(self._parsed_args, arg, conf_data[arg])
-            elif isinstance(self._arg_dest_object_map[arg], argparse._StoreConstAction) \
-                    and (cmd_line_val != self._arg_dest_object_map[arg].const):
-                print('Ping')
+            elif isinstance(self._arg_dest_object_map[arg], argparse._StoreConstAction) and (cmd_line_val != self._arg_dest_object_map[arg].const):
                 setattr(self._parsed_args, arg, conf_data[arg])
-            else:
-                if conf_data[arg] != cmd_line_val:
+            elif conf_data[arg] != cmd_line_val and cmd_line_val != self.get_default(arg):
                     print('The "{}" argument set in the command line overwrites the value set in the config file. An '
                           'updated config will be written.'.format(arg))
                     require_saving_updated_config = True
+            else:
+                setattr(self._parsed_args, arg, conf_data[arg])
+                
         return require_saving_updated_config
 
     def _validate_config(self):
@@ -130,7 +157,8 @@ class PersistentArgumentParser(argparse.ArgumentParser):
                     error_msg += self._validate_mutex_group(arg_required)
                     handled_mutex_groups.append(arg_required)
                 continue
-            missing_args.extend(self._validate_argument(arg_name, arg_required))
+            missing_args.extend(
+                self._validate_argument(arg_name, arg_required))
 
         if missing_args:
             error_msg += '\nThe configuration was invalid, the following required arguments were not set: {}'\
@@ -164,4 +192,5 @@ class PersistentArgumentParser(argparse.ArgumentParser):
     def _save_config(self):
         with open(Path(self._parsed_args.config), 'w+') as cf:
             yaml.dump(self.parsed_args_to_dict(), cf)
-            print('Saved the updated config file to {}'.format(self._parsed_args.config))
+            print('Saved the updated config file to {}'.format(
+                self._parsed_args.config))
