@@ -138,12 +138,13 @@ class PersistentArgumentParser(argparse.ArgumentParser):
             elif isinstance(self._arg_dest_object_map[arg], argparse._StoreConstAction) and (cmd_line_val != self._arg_dest_object_map[arg].const):
                 setattr(self._parsed_args, arg, conf_data[arg])
             elif conf_data[arg] != cmd_line_val and cmd_line_val != self.get_default(arg):
-                    print('The "{}" argument set in the command line overwrites the value set in the config file. An '
-                          'updated config will be written.'.format(arg))
-                    require_saving_updated_config = True
+                print("PATTERNS:", self._get_nargs_pattern)
+                print('The "{}" argument set in the command line overwrites the value set in the config file. An '
+                      'updated config will be written.'.format(arg))
+                require_saving_updated_config = True
             else:
                 setattr(self._parsed_args, arg, conf_data[arg])
-                
+
         return require_saving_updated_config
 
     def _validate_config(self):
